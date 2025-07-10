@@ -6,10 +6,10 @@ import "../src/MintDumpResponseTrap.sol";
 
 contract DeployMintDumpResponseTrap is Script {
     function run() external {
-        address droseraRegistry = vm.envAddress("DROSERA_REGISTRY");
+        address droseraaddress = vm.envAddress("DROSERA_ADDRESS");
 
         vm.startBroadcast();
-        MintDumpResponseTrap response = new MintDumpResponseTrap(droseraRegistry);
+        MintDumpResponseTrap response = new MintDumpResponseTrap(droseraaddress);
         vm.stopBroadcast();
 
         console2.log("? Deployed MintDumpResponseTrap to:", address(response));
