@@ -2,12 +2,10 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/MintDumpTrap.sol"; 
+import "../src/MintDumpTrap.sol";
 
 contract MintDumpTrapTest is Test {
     MintDumpTrap trap;
-
-    address dummyToken = address(0xDEAD); // dummy token address
 
     struct TransferEvent {
         address from;
@@ -16,7 +14,7 @@ contract MintDumpTrapTest is Test {
     }
 
     function setUp() public {
-        trap = new MintDumpTrap(dummyToken);
+        trap = new MintDumpTrap();
     }
 
     function testShouldRespondWhenMintAndDump() public view {
@@ -34,8 +32,9 @@ contract MintDumpTrapTest is Test {
             amount: 1000 ether
         });
 
-        bytes[] memory input = new bytes[](1);
-        input[0] = abi.encode(logs);
+        bytes[] memory input = new bytes[](2);
+        input[0] = abi.encode(block.timestamp, block.number);
+        input[1] = abi.encode(logs);
 
         (bool shouldRespond, bytes memory reason) = trap.shouldRespond(input);
         assertTrue(shouldRespond, "Should respond to mint-and-dump");
@@ -43,9 +42,9 @@ contract MintDumpTrapTest is Test {
         bytes32 expectedReasonHash = keccak256("TOKEN_DUMP_DETECTED");
         bytes memory expectedReason = abi.encode(
             expectedReasonHash,
-            logs[0].to,  // The 'to' address of the mint
-            logs[1].to,  // The 'to' address of the dump
-            logs[0].amount // The amount
+            logs[0].to,
+            logs[1].to,
+            logs[0].amount
         );
         assertEq(reason, expectedReason, "Reason should match expected mint-dump details");
     }
@@ -59,21 +58,23 @@ contract MintDumpTrapTest is Test {
             amount: 1000 ether
         });
 
-        bytes[] memory input = new bytes[](1);
-        input[0] = abi.encode(logs);
+        bytes[] memory input = new bytes[](2);
+        input[0] = abi.encode(block.timestamp, block.number);
+        input[1] = abi.encode(logs);
 
         (bool shouldRespond, ) = trap.shouldRespond(input);
         assertFalse(shouldRespond, "Should not respond without dump");
     }
 
-    function testShouldNotRespondWithNoData() public {
+    function testShouldNotRespondWithNoData() public view {
         bytes[] memory input = new bytes[](0); // Empty array
 
-        vm.expectRevert("No input data provided.");
-        trap.shouldRespond(input);
+        (bool shouldRespond, bytes memory reason) = trap.shouldRespond(input);
+        assertFalse(shouldRespond, "Should not respond with empty input");
+        assertEq(string(reason), "No input data provided.", "Expected reason: No input data provided.");
     }
-    
-    function testShouldNotRespondWithTooManyLogs() public {
+
+    function testShouldNotRespondWithTooManyLogs() public view {
         TransferEvent[] memory logs = new TransferEvent[](51); // More than 50 logs
 
         for (uint i = 0; i < 51; i++) {
@@ -84,17 +85,19 @@ contract MintDumpTrapTest is Test {
             });
         }
 
-        bytes[] memory input = new bytes[](1);
-        input[0] = abi.encode(logs);
+        bytes[] memory input = new bytes[](2); // Allocate space for 2 elements
+        input[0] = abi.encode(block.timestamp, block.number); // Add timestamp and block number
+        input[1] = abi.encode(logs); // Add the logs
 
-        vm.expectRevert("Too many logs.");
-        trap.shouldRespond(input);
+        (bool shouldRespond, bytes memory reason) = trap.shouldRespond(input);
+        assertFalse(shouldRespond, "Should not respond with too many logs");
+        assertEq(string(reason), "Too many logs.", "Expected reason: Too many logs.");
     }
 
     function testShouldNotRespondWhenNoMint() public view {
         TransferEvent[] memory logs = new TransferEvent[](2);
 
-        logs[0] = TransferEvent({ // No mint (from != address(0))
+        logs[0] = TransferEvent({
             from: address(0x1111),
             to: address(0x2222),
             amount: 100 ether
@@ -106,8 +109,9 @@ contract MintDumpTrapTest is Test {
             amount: 100 ether
         });
 
-        bytes[] memory input = new bytes[](1);
-        input[0] = abi.encode(logs);
+        bytes[] memory input = new bytes[](2);
+        input[0] = abi.encode(block.timestamp, block.number);
+        input[1] = abi.encode(logs);
 
         (bool shouldRespond, bytes memory reason) = trap.shouldRespond(input);
         assertFalse(shouldRespond, "Should not respond if no mint detected");
@@ -117,20 +121,21 @@ contract MintDumpTrapTest is Test {
     function testShouldNotRespondWhenMintButNoMatchingDump() public view {
         TransferEvent[] memory logs = new TransferEvent[](2);
 
-        logs[0] = TransferEvent({ // Mint
+        logs[0] = TransferEvent({
             from: address(0),
             to: address(0xABCDEF),
             amount: 50 ether
         });
 
-        logs[1] = TransferEvent({ // Dump doesn't match minter (0xABCDEF)
+        logs[1] = TransferEvent({
             from: address(0x123456),
             to: address(0x789ABC),
             amount: 50 ether
         });
 
-        bytes[] memory input = new bytes[](1);
-        input[0] = abi.encode(logs);
+        bytes[] memory input = new bytes[](2);
+        input[0] = abi.encode(block.timestamp, block.number);
+        input[1] = abi.encode(logs);
 
         (bool shouldRespond, bytes memory reason) = trap.shouldRespond(input);
         assertFalse(shouldRespond, "Should not respond if mint but no matching dump");
